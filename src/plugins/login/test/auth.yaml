@@ -9,8 +9,8 @@ specs:
       - subtask: login
         title: login
       - action: navigate
-        title: navigate to dashboard
-        path: dashboard
+        title: navigate to feeds page
+        path: feeds
       - wait: forElement
         title: Ensure the logged-in menu appears, then open the user menu
         selector:
@@ -32,10 +32,12 @@ specs:
               value: signed-in
             - type: label
               value: username
-        text: "${config.auth.username}"
+        text: "{{config.auth.username}}"
       - wait: forText
         title: And the real name too
         selector:
           - type: label
             value: realname
-        text: ${config.auth.realname}
+        text: "{{config.auth.realname}}"
+      - subtask: logout
+        title: logout

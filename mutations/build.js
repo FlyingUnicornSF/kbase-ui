@@ -23,7 +23,7 @@
 /*eslint strict: ["error", "global"] */
 'use strict';
 
-var Promise = require('bluebird'),
+const Promise = require('bluebird'),
     fs = Promise.promisifyAll(require('fs-extra')),
     path = require('path'),
     pathExists = require('path-exists'),
@@ -35,7 +35,8 @@ var Promise = require('bluebird'),
     dir = Promise.promisifyAll(require('node-dir')),
     util = require('util'),
     handlebars = require('handlebars'),
-    numeral = require('numeral');
+    numeral = require('numeral'),
+    tar = require('tar');
 
 // running from kbase-ui/mutations/build.js
 // some binaries in kbase-ui/node-modules/.bin
@@ -63,6 +64,7 @@ function run(command, ignoreStdErr = false, verbose = false) {
 
 function gitClone(url, dest, branch = 'master') {
     const commandLine = ['git clone --quiet --depth 1', '--branch', branch, url, dest].join(' ');
+    console.log('git cloning...', commandLine);
     return run(commandLine, true);
 }
 
@@ -341,13 +343,8 @@ function fetchPluginsFromGit(state) {
                     url = plugin.source.git.url || 'https://github.com/' + gitAccount + '/' + repoName;
 
                 const dest = gitDestination.concat([plugin.globalName]).join('/');
-                mutant.log('...gitClone');
-                return gitClone(url, dest, branch).then(() => {
-                    mutant.log('...buildPlugin');
-                    if (!plugin.prebuilt) {
-                        return buildPlugin(state, dest);
-                    }
-                });
+                mutant.log(`... cloning plugin repo ${plugin.globalName}, version ${version}, branch: ${branch}`);
+                return gitClone(url, dest, branch);
             });
         });
 }
@@ -849,10 +846,40 @@ function installPlugins(state) {
                             return typeof plugin === 'object' && plugin.source.bower;
                         })
                         .map(function (plugin) {
-                            var cwds = plugin.cwd || 'dist/plugin',
-                                cwd = cwds.split('/'),
-                                srcDir = root.concat(['build', 'bower_components', plugin.globalName]).concat(cwd),
-                                destDir = root.concat(['build', 'client', 'modules', 'plugins', plugin.name]);
+                            const pluginDir = root.concat(['build', 'bower_components', plugin.globalName]);
+                            let srcDir;
+                            if (plugin.cwd) {
+                                mutant.info(`${plugin.name}: plugin building from configured cwd: ${plugin.cwd}`)
+                                srcDir = pluginDir.concat([plugin.cwd.split('/')]);
+                            } else {
+                                const distFile = pluginDir.concat(['dist.tgz']);
+                                if (pathExists.sync(distFile.join('/'))) {
+                                    mutant.info(`${plugin.name}: plugin installing from dist.tgz`);
+                                    tar.extract({
+                                        cwd: pluginDir.join('/'),
+                                        file: distFile.join('/'),
+                                        sync: true
+                                    });
+                                    srcDir = pluginDir.concat(['dist', 'plugin']);
+                                } else {
+                                    srcDir = pluginDir.concat(['dist', 'plugin']);
+                                    if (!pathExists.sync(srcDir.join('/'))) {
+                                        srcDir = pluginDir.concat(['src', 'plugin']);
+                                        if (!pathExists.sync(srcDir.join('/'))) {
+                                            throw new Error('Cannot find plugin directory: ' + plugin.name);
+                                        } else {
+                                            mutant.info(`${plugin.name}: plugin installing from src by default`)
+                                        }
+                                    } else {
+                                        mutant.info(`${plugin.name}: plugin installing from dist by default`)
+                                    }
+                                }
+                            }
+                            // const cwds = plugin.cwd
+                            // const pluginDir =  srcDir = root.concat(['build', 'bower_components', plugin.globalName]).concat(cwd)
+                            // cwd = cwds.split('/'),
+                            // srcDir = root.concat(['build', 'bower_components', plugin.globalName]).concat(cwd),
+                            const destDir = root.concat(['build', 'client', 'modules', 'plugins', plugin.name]);
                             mutant.ensureDir(destDir);
                             return mutant.copyFiles(srcDir, destDir, '**/*');
                         })
@@ -864,10 +891,27 @@ function installPlugins(state) {
                                     return typeof plugin === 'object' && plugin.source.git;
                                 })
                                 .map(function (plugin) {
-                                    const cwds = plugin.cwd || 'dist/plugin',
-                                        cwd = cwds.split('/'),
-                                        srcDir = root.concat(['gitDownloads', plugin.globalName]).concat(cwd),
-                                        destDir = root.concat(['build', 'client', 'modules', 'plugins', plugin.name]);
+                                    const pluginDir = root.concat(['gitDownloads', plugin.globalName]);
+                                    const destDir = root.concat(['build', 'client', 'modules', 'plugins', plugin.name]);
+                                    let srcDir;
+                                    if (plugin.cwd) {
+                                        mutant.info(`${plugin.name}: plugin building from configured cwd: ${plugin.cwd}`)
+                                        const cwd = plugin.cwd.split('/');
+                                        srcDir = pluginDir.concat(cwd);
+                                    } else {
+                                        const distFile = pluginDir.concat(['dist.tgz']);
+                                        if (pathExists.sync(distFile.join('/'))) {
+                                            mutant.info(`${plugin.name}: plugin installing from dist.tgz`);
+                                            tar.extract({
+                                                cwd: pluginDir.join('/'),
+                                                file: distFile.join('/'),
+                                                sync: true
+                                            });
+                                            srcDir = pluginDir.concat(['dist', 'plugin']);
+                                        } else {
+                                            throw new Error('git plugin does not have an install method - neither cwd nor dist.tgz');
+                                        }
+                                    }
 
                                     mutant.ensureDir(destDir);
                                     return mutant.copyFiles(srcDir, destDir, '**/*');
@@ -921,6 +965,7 @@ function installPlugins(state) {
                 var pluginsPath = root.concat(['build', 'client', 'modules', 'plugins']);
                 return dirList(pluginsPath).then(function (pluginDirs) {
                     return Promise.each(pluginDirs, function (pluginDir) {
+                        // Has integration tests?
                         var testDir = pluginDir.path.concat(['test']);
                         return pathExists(testDir.join('/')).then(function (exists) {
                             var justDir = pluginDir.path[pluginDir.path.length - 1];
@@ -999,15 +1044,15 @@ function setupBuild(state) {
             return fs.rmdirAsync(root.concat(['src']).join('/'));
         })
         .then(function () {
-            mutant.log('injectPluginsIntoBower');
+            mutant.log('Inject Plugins Into Bower');
             return injectPluginsIntoBower(state);
         })
         .then(function () {
-            mutant.log('Fetch plugins from github and build...');
+            mutant.log('Fetch plugins from github');
             return fetchPluginsFromGit(state);
         })
         .then(function () {
-            mutant.log('injectPluginsIntoConfig');
+            mutant.log('Inject Plugins Into Config');
             return injectPluginsIntoConfig(state);
         })
         .then(function () {

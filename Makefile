@@ -40,7 +40,10 @@ build           = dev
 # dev, ci, next, appdev, prod
 # No default, because one should think about this.
 # Used to target the actual deploy config file (see kbase-ini-dir).
-env             = dev
+env             = ci
+
+# The browser to test against
+browser      	= chrome
 
 # The custom docker network
 # For local development.
@@ -56,6 +59,9 @@ kbase-ini-dir  = /kb/deployment/config
 # Host is the kbase deployment host to utilize for integration tests
 # ci, next, appdev, prod
 host = ci
+
+# The testing service
+service = selenium-standalone
 
 # functions
 
@@ -182,8 +188,10 @@ unit-tests:
 	$(KARMA) start test/unit-tests/karma.conf.js
 
 integration-tests:
-	@:$(call check_defined, host, first component of hostname)
-	$(GRUNT) integration-tests --host=$(host)
+	@:$(call check_defined, env, first component of hostname and kbase environment)
+	@:$(call check_defined, browser, the browser to test against)
+	@:$(call check_defined, service, the testing service )
+	ENV=$(env) BROWSER=$(browser) SERVICE_USER=$(user) SERVICE_KEY=$(key) SERVICE=$(service) $(GRUNT) webdriver:service --env=$(env)
 
 travis-tests:
 	$(GRUNT) test-travis

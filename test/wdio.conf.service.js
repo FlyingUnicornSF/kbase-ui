@@ -1,12 +1,59 @@
-exports.config = {
-    // Note: for local testing, these should be set in a script or by hand in the shell that is invoking the 
-    // tests. In Travis they will be set as encrypted keys.
-    user: process.env.SAUCE_USERNAME,
-    key: process.env.SAUCE_ACCESS_KEY,
-    sauceConnect: 'true',
-    sauceConnectOpts: {
-        doctor: true
+const env = process.env.ENV;
+let hostPrefix;
+if (env === 'prod') {
+    hostPrefix = 'narrative';
+} else {
+    hostPrefix = env;
+}
+console.log('TEST ENV        : ' + env);
+console.log('TEST HOST PREFIX: ' + hostPrefix);
+
+const browserName = process.env.BROWSER
+// const browserName = 'chrome';
+const browserConfigs = {
+    chrome: {
+        browserName: "chrome",
+        acceptInsecureCerts: true,
+        maxInstances: 1
     },
+    firefox: {
+        browserName: "firefox",
+        acceptInsecureCerts: true,
+        maxInstances: 1
+    },
+    safari: {
+        browserName: "safari"
+    },
+    safari13Catalina: {
+        'os': 'OS X',
+        'os_version': 'Catalina',
+        'browser': 'Safari',
+        'browser_version': '13.0',
+        'resolution': '1920x1080'
+    }
+}
+const browser = browserConfigs[browserName]
+
+console.log('TEST BROWSER    : ' + browserName);
+
+const SERVICE_USER = process.env.SERVICE_USER;
+const SERVICE_KEY = process.env.SERVICE_KEY;
+const SERVICE = process.env.SERVICE;
+
+console.log('TEST SERVICE    : ' + SERVICE);
+console.log('SERVICE USER    : ' + SERVICE_USER);
+console.log('SERVICE KEY     : ' + SERVICE_KEY);
+
+let wdioConfig = {
+    //
+    // ====================
+    // Runner Configuration
+    // ====================
+    //
+    // WebdriverIO allows it to run your tests in arbitrary locations (e.g. locally or
+    // on a remote machine).
+    runner: "local",
+
     //
     // ==================
     // Specify Test Files
@@ -16,9 +63,7 @@ exports.config = {
     // NPM script (see https://docs.npmjs.com/cli/run-script) then the current working
     // directory is where your package.json resides, so `wdio` will be called from there.
     //
-    specs: [
-        './test/specs/**/*.js'
-    ],
+    specs: ["./dev/test/integration-tests/specs/theSpec.js"],
     // Patterns to exclude.
     exclude: [
         // 'path/to/excluded/files'
@@ -39,62 +84,48 @@ exports.config = {
     // and 30 processes will get spawned. The property handles how many capabilities
     // from the same test should run tests.
     //
-    maxInstances: 10,
+    maxInstances: 1,
+    maxInstancesPerCapability: 1,
     //
     // If you have trouble getting all important capabilities together, check out the
     // Sauce Labs platform configurator - a great tool to configure your capabilities:
     // https://docs.saucelabs.com/reference/platforms-configurator
     //
     capabilities: [
-        // Firefox
-        {
-            // maxInstances can get overwritten per capability. So if you have an in-house Selenium
-            // grid with only 5 firefox instances available you can make sure that not more than
-            // 5 instances get started at a time.
-            maxInstances: 5,
-            //
-            browserName: 'firefox',
-            platform: 'macOS 10.12',
-            version: 'latest',
-            acceptInsecureCerts: true
-        },
-        // Chrome
-        {
-            maxInstances: 5,
-            browserName: 'chrome',
-            platform: 'macOS 10.12',
-            version: 'latest',
-            acceptInsecureCerts: true
-        }
+        browser
     ],
-    port: 4445,
     //
     // ===================
     // Test Configurations
     // ===================
     // Define all options that are relevant for the WebdriverIO instance here
     //
-    // By default WebdriverIO commands are executed in a synchronous way using
-    // the wdio-sync package. If you still want to run your tests in an async way
-    // e.g. using promises you can set the sync option to false.
-    sync: true,
+    // Level of logging verbosity: trace | debug | info | warn | error | silent
+    logLevel: "warn",
     //
-    // Level of logging verbosity: silent | verbose | command | data | result | error
-    logLevel: 'verbose',
-    //
-    // Enables colors for log output.
-    coloredLogs: true,
+    // Set specific log levels per logger
+    // loggers:
+    // - webdriver, webdriverio
+    // - wdio-applitools-service, wdio-browserstack-service, wdio-devtools-service, wdio-sauce-service
+    // - wdio-mocha-framework, wdio-jasmine-framework
+    // - wdio-local-runner, wdio-lambda-runner
+    // - wdio-sumologic-reporter
+    // - wdio-cli, wdio-config, wdio-sync, wdio-utils
+    // Level of logging verbosity: trace | debug | info | warn | error | silent
+    // logLevels: {
+    // webdriver: 'info',
+    // 'wdio-applitools-service': 'info'
+    // },
     //
     // If you only want to run your tests until a specific amount of tests have failed use
     // bail (default is 0 - don't bail, run all tests).
-    bail: 0,
+    bail: 1,
     //
-    // Saves a screenshot to a given path if a command fails.
-    screenshotPath: './errorShots/',
-    //
-    // Set a base URL in order to shorten url command calls. If your url parameter starts
-    // with "/", then the base url gets prepended.
-    baseUrl: 'https://ci.kbase.us',
+    // Set a base URL in order to shorten url command calls. If your `url` parameter starts
+    // with `/`, the base url gets prepended, not including the path portion of your baseUrl.
+    // If your `url` parameter starts without a scheme or `/` (like `some/path`), the base url
+    // gets prepended directly.
+    baseUrl: `https://${hostPrefix}.kbase.us`,
     //
     // Default timeout for all waitFor* commands.
     waitforTimeout: 10000,
@@ -106,50 +137,35 @@ exports.config = {
     // Default request retries count
     connectionRetryCount: 3,
     //
-    // Initialize the browser instance with a WebdriverIO plugin. The object should have the
-    // plugin name as key and the desired plugin options as properties. Make sure you have
-    // the plugin installed before running any tests. The following plugins are currently
-    // available:
-    // WebdriverCSS: https://github.com/webdriverio/webdrivercss
-    // WebdriverRTC: https://github.com/webdriverio/webdriverrtc
-    // Browserevent: https://github.com/webdriverio/browserevent
-    // plugins: {
-    //     webdrivercss: {
-    //         screenshotRoot: 'my-shots',
-    //         failedComparisonsRoot: 'diffs',
-    //         misMatchTolerance: 0.05,
-    //         screenWidth: [320,480,640,1024]
-    //     },
-    //     webdriverrtc: {},
-    //     browserevent: {}
-    // },
-    //
     // Test runner services
     // Services take over a specific job you don't want to take care of. They enhance
     // your test setup with almost no effort. Unlike plugins, they don't add new
     // commands. Instead, they hook themselves up into the test process.
-    // services: ['sauce'],
-    // services: ['selenium-standalone'],
+    services: [SERVICE],
+
     //
     // Framework you want to run your specs with.
     // The following are supported: Mocha, Jasmine, and Cucumber
-    // see also: http://webdriver.io/guide/testrunner/frameworks.html
+    // see also: https://webdriver.io/docs/frameworks.html
     //
     // Make sure you have the wdio adapter package for the specific framework installed
     // before running any tests.
-    framework: 'jasmine',
+    framework: "jasmine",
+    //
+    // The number of times to retry the entire specfile when it fails as a whole
+    // specFileRetries: 1,
     //
     // Test reporter for stdout.
     // The only one supported by default is 'dot'
-    // see also: http://webdriver.io/guide/testrunner/reporters.html
-    reporters: ['dot'],
+    // see also: https://webdriver.io/docs/dot-reporter.html
+    reporters: ["dot", "spec"],
 
     //
     // Options to be passed to Jasmine.
     jasmineNodeOpts: {
         //
         // Jasmine default timeout
-        defaultTimeoutInterval: 30000,
+        defaultTimeoutInterval: 60000,
         //
         // The Jasmine framework allows interception of each assertion in order to log the state of the application
         // or website depending on the result. For example, it is pretty handy to take a screenshot every time
@@ -157,7 +173,7 @@ exports.config = {
         expectationResultHandler: function (passed, assertion) {
             // do something
         }
-    },
+    }
 
     //
     // =====
@@ -191,12 +207,25 @@ exports.config = {
      */
     // before: function (capabilities, specs) {
     // },
-    //
+    /**
+     * Runs before a WebdriverIO command gets executed.
+     * @param {String} commandName hook command name
+     * @param {Array} args arguments that command would receive
+     */
+    // beforeCommand: function (commandName, args) {
+    // },
+
     /**
      * Hook that gets executed before the suite starts
      * @param {Object} suite suite details
      */
     // beforeSuite: function (suite) {
+    // },
+    /**
+     * Function to be executed before a test (in Mocha/Jasmine) or a step (in Cucumber) starts.
+     * @param {Object} test test details
+     */
+    // beforeTest: function (test) {
     // },
     /**
      * Hook that gets executed _before_ a hook within the suite starts (e.g. runs before calling
@@ -211,28 +240,6 @@ exports.config = {
     // afterHook: function () {
     // },
     /**
-     * Function to be executed before a test (in Mocha/Jasmine) or a step (in Cucumber) starts.
-     * @param {Object} test test details
-     */
-    // beforeTest: function (test) {
-    // },
-    /**
-     * Runs before a WebdriverIO command gets executed.
-     * @param {String} commandName hook command name
-     * @param {Array} args arguments that command would receive
-     */
-    // beforeCommand: function (commandName, args) {
-    // },
-    /**
-     * Runs after a WebdriverIO command gets executed
-     * @param {String} commandName hook command name
-     * @param {Array} args arguments that command would receive
-     * @param {Number} result 0 - command success, 1 - command error
-     * @param {Object} error error object if any
-     */
-    // afterCommand: function (commandName, args, result, error) {
-    // },
-    /**
      * Function to be executed after a test (in Mocha/Jasmine) or a step (in Cucumber) starts.
      * @param {Object} test test details
      */
@@ -243,6 +250,16 @@ exports.config = {
      * @param {Object} suite suite details
      */
     // afterSuite: function (suite) {
+    // },
+
+    /**
+     * Runs after a WebdriverIO command gets executed
+     * @param {String} commandName hook command name
+     * @param {Array} args arguments that command would receive
+     * @param {Number} result 0 - command success, 1 - command error
+     * @param {Object} error error object if any
+     */
+    // afterCommand: function (commandName, args, result, error) {
     // },
     /**
      * Gets executed after all tests are done. You still have access to all global variables from
@@ -262,10 +279,27 @@ exports.config = {
     // afterSession: function (config, capabilities, specs) {
     // },
     /**
-     * Gets executed after all workers got shut down and the process is about to exit. It is not
-     * possible to defer the end of the process using a promise.
+     * Gets executed after all workers got shut down and the process is about to exit.
      * @param {Object} exitCode 0 - success, 1 - fail
+     * @param {Object} config wdio configuration object
+     * @param {Array.<Object>} capabilities list of capabilities details
+     * @param {<Object>} results object containing test results
      */
-    // onComplete: function(exitCode) {
-    // }
+    // onComplete: function(exitCode, config, capabilities, results) {
+    // },
+    /**
+     * Gets executed when a refresh happens.
+     * @param {String} oldSessionId session ID of the old session
+     * @param {String} newSessionId session ID of the new session
+     */
+    //onReload: function(oldSessionId, newSessionId) {
+    //}
+};
+
+if (SERVICE !== 'selenium-standalone') {
+    wdioConfig.user = SERVICE_USER;
+    wdioConfig.key = SERVICE_KEY;
 }
+
+
+exports.config = wdioConfig;
